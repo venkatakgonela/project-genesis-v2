@@ -1,0 +1,21 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Local scratch space
+.tmp/
+tmp/
+
+# Generated reports and caches
+*.log
+.cache/
+
+# Language and tool caches kept out until implementation begins.
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+.venv/
+venv/
+

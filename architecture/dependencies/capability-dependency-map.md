@@ -28,14 +28,15 @@
 
 | Capability | Depends On | Sequencing Notes |
 | --- | --- | --- |
-| Career Intelligence | AI Gateway, Knowledge Platform, Browser Platform, Project Conductor, Evaluation Platform, Prompt Platform, Context Platform | Business application should not begin until core platform contracts are approved. |
+| Career Intelligence | AI Gateway, Knowledge Platform, Browser Platform, Project Conductor, Evaluation Platform, Prompt Platform, Context Engineering Platform | Business application should not begin until core platform contracts are approved. |
 | AI Gateway | Model Providers, Observability, Evaluation Platform, Project Conductor | Needs provider abstraction and routing ADR before implementation. |
-| Knowledge Platform | Project Conductor, Artifact Publisher, Evaluation Platform | Requires knowledge lifecycle and approval workflow. |
-| Evaluation Platform | Golden Prompts, Golden Datasets, Golden Workflows, Observability, Project Conductor | Should be established before any agentic implementation. |
+| Knowledge Platform | Project Conductor, Evaluation Platform | Requires knowledge lifecycle and approval workflow. |
+| Evaluation Platform | Project Conductor, Technology Radar | Should be established before any agentic implementation. |
 | Prompt Platform | Evaluation Platform, Knowledge Platform, Project Conductor | Prompts require versioning, review, and evaluation gates. |
-| Context Platform | Knowledge Platform, Memory Platform, Evaluation Platform, Project Conductor | Context quality must be measurable. |
+| Context Engineering Platform | Knowledge Platform, Evaluation Platform, Project Conductor | Context quality must be measurable. |
 | Memory Platform | Knowledge Platform, Evaluation Platform, Observability | Future durable memory should be governed and auditable. |
-| Agent Platform | AI Gateway, Tool Platform, Context Platform, Memory Platform, Evaluation Platform, Observability | Agent orchestration comes after gateway, tools, context, and evaluation basics. |
+| Tool Platform | Evaluation Platform, Observability, Project Conductor | Tools require governance, safety boundaries, and evaluation before agent exposure. |
+| Agent Platform | AI Gateway, Tool Platform, Context Engineering Platform, Memory Platform, Evaluation Platform, Observability | Agent orchestration comes after gateway, tools, context, and evaluation basics. |
 | Browser Platform | Tool Platform, Evaluation Platform, Observability | Browser automation needs evidence and regression tests. |
 | Artifact Publisher | Knowledge Platform, Project Conductor | Publishing should only expose reviewed artifacts. |
 | Programme Management | Project Conductor | Programme state feeds work sequencing and review. |
@@ -46,7 +47,6 @@
 2. Evaluation Platform scaffold and golden asset lifecycle.
 3. AI Gateway architecture and model routing ADRs.
 4. Knowledge Platform and Artifact Publisher.
-5. Prompt Platform and Context Platform.
-6. Browser Platform and Tool Platform.
+5. Prompt Platform and Context Engineering Platform.
+6. Tool Platform and Browser Platform.
 7. Career Intelligence application foundation.
-

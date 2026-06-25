@@ -28,8 +28,9 @@
 | Evaluation Platform | Defines and executes evaluation plans across prompts, agents, tools, context, retrieval, models, and workflows. | Specification created |
 | AI Gateway | Provides model-agnostic access, policy, routing, observability, and provider abstraction. | Specification created |
 | Prompt Platform | Manages prompt assets, versioning, review, evaluation, and promotion. | Specification created |
-| Context Platform | Packages task context, memory inputs, retrieval outputs, and application state. | Specification created |
+| Context Engineering Platform | Packages task context, memory inputs, retrieval outputs, and application state. | Specification created |
 | Memory Platform | Future durable memory capability with governance and evaluation. | ADR placeholder |
+| Tool Platform | Future governed tool registry, invocation, safety, and evaluation capability. | ADR placeholder |
 | Browser Platform | Future browser automation and observation capability. | Roadmap placeholder |
 | Model Providers | Provider integration layer for OpenAI, Claude, Gemini, Ollama, LM Studio, and future providers. | Roadmap placeholder |
 | Observability | Tracing, metrics, logs, run evidence, and model interaction visibility. | Roadmap placeholder |
@@ -44,4 +45,3 @@
 ## Capability Rule
 
 Capabilities are preferred over features. A capability becomes implementation-ready only after vision, requirements, architecture, ADR path, work package, evaluation plan, evidence plan, review criteria, and lessons-learned path exist.
-

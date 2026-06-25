@@ -1,4 +1,6 @@
-.DS_Store
+*.DS_Store
+__MACOSX/
+**/__MACOSX/
 .idea/
 .vscode/
 
@@ -12,10 +14,12 @@ tmp/
 
 # Language and tool caches kept out until implementation begins.
 __pycache__/
+**/__pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 node_modules/
 .venv/
+**/.venv/
 venv/
-
+**/venv/

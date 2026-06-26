@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
 
+from project_conductor.metadata_contract import REQUIRED_METADATA_FIELDS
+
 
 DEFAULT_ARTIFACT_SUFFIXES: Tuple[str, ...] = (".md",)
 DEFAULT_EXCLUDED_DIRECTORIES = frozenset(
@@ -21,22 +23,6 @@ DEFAULT_EXCLUDED_DIRECTORIES = frozenset(
         "node_modules",
     }
 )
-REQUIRED_METADATA_FIELDS: Tuple[str, ...] = (
-    "ID",
-    "Title",
-    "Version",
-    "Status",
-    "Owner",
-    "Created Date",
-    "Updated Date",
-    "Dependencies",
-    "Related ADRs",
-    "Related Work Packages",
-    "Tags",
-    "Review Date",
-)
-
-
 class RepositoryScanError(ValueError):
     """Raised when a repository scan cannot be started."""
 
@@ -306,4 +292,3 @@ def _classify_artifact(relative_path: str) -> str:
     if parts[0] == "web-review":
         return "review"
     return "repository"
-

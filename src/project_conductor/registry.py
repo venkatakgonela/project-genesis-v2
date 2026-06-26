@@ -1,4 +1,4 @@
-"""Artifact Registry Model for Project Conductor Sprint 2."""
+"""Artifact Registry Model for deterministic Project Conductor."""
 
 from __future__ import annotations
 
@@ -7,12 +7,17 @@ import json
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from project_conductor.metadata_contract import (
+    ALLOWED_METADATA_STATUSES,
+    DURABLE_REGISTRY_AUTHORITY_TYPES,
+    REGISTRY_SCHEMA_VERSION,
+    default_metadata_contract,
+)
 from project_conductor.scanner import Artifact, RepositoryScan, ScanProblem
 
 
-REGISTRY_VERSION = "0.1.0"
+REGISTRY_VERSION = "0.2.0"
 DEFAULT_SOURCE_PROVIDER = "filesystem"
-VALID_METADATA_STATUSES = frozenset({"complete", "incomplete", "missing"})
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,7 @@ class RegistryArtifact:
     hash: str
     metadata_status: str
     metadata_id: Optional[str]
+    durable: bool
     problems: Tuple[str, ...]
     source_provider: str
 
@@ -38,6 +44,7 @@ class RegistryArtifact:
             "hash": self.hash,
             "metadata_status": self.metadata_status,
             "metadata_id": self.metadata_id,
+            "durable": self.durable,
             "problems": list(self.problems),
             "source_provider": self.source_provider,
         }
@@ -64,6 +71,8 @@ class ArtifactRegistry:
     """Deterministic Artifact Registry representation."""
 
     registry_version: str
+    registry_schema_version: str
+    metadata_contract_version: str
     source_provider: str
     artifacts: Tuple[RegistryArtifact, ...]
     validation: RegistryValidationReport
@@ -75,6 +84,8 @@ class ArtifactRegistry:
     def to_dict(self) -> Dict[str, object]:
         return {
             "registry_version": self.registry_version,
+            "registry_schema_version": self.registry_schema_version,
+            "metadata_contract_version": self.metadata_contract_version,
             "source_provider": self.source_provider,
             "artifact_count": self.artifact_count,
             "validation": self.validation.to_dict(),
@@ -99,8 +110,11 @@ def build_artifact_registry(
         )
     )
     validation = validate_registry_artifacts(artifacts, source_provider=source_provider)
+    metadata_contract = default_metadata_contract()
     return ArtifactRegistry(
         registry_version=REGISTRY_VERSION,
+        registry_schema_version=REGISTRY_SCHEMA_VERSION,
+        metadata_contract_version=metadata_contract.version,
         source_provider=source_provider,
         artifacts=artifacts,
         validation=validation,
@@ -139,8 +153,16 @@ def validate_registry_artifacts(
             errors.append(f"artifact {artifact.path!r} has empty type")
         if not artifact.hash:
             errors.append(f"artifact {artifact.path!r} has empty hash")
-        if artifact.metadata_status not in VALID_METADATA_STATUSES:
+        if artifact.metadata_status not in ALLOWED_METADATA_STATUSES:
             errors.append(f"artifact {artifact.path!r} has invalid metadata_status {artifact.metadata_status!r}")
+        if artifact.metadata_id and not artifact.artifact_id.startswith("metadata:"):
+            errors.append(f"artifact {artifact.path!r} metadata-backed artifact_id must start with 'metadata:'")
+        if artifact.metadata_id is None and not artifact.artifact_id.startswith("path:"):
+            errors.append(f"artifact {artifact.path!r} path-backed artifact_id must start with 'path:'")
+        if artifact.metadata_status == "missing" and artifact.durable:
+            errors.append(f"artifact {artifact.path!r} cannot be durable without metadata")
+        if artifact.durable and artifact.artifact_type not in DURABLE_REGISTRY_AUTHORITY_TYPES:
+            errors.append(f"artifact {artifact.path!r} type {artifact.artifact_type!r} is not a durable authority type")
         if artifact.source_provider != source_provider:
             errors.append(
                 f"artifact {artifact.path!r} source_provider {artifact.source_provider!r} does not match registry provider"
@@ -161,6 +183,7 @@ def _to_registry_artifact(artifact: Artifact, *, source_provider: str) -> Regist
         hash=artifact.sha256,
         metadata_status=_metadata_status(artifact),
         metadata_id=metadata_id,
+        durable=_is_durable_registry_authority(artifact),
         problems=_problem_messages(artifact.problems),
         source_provider=source_provider,
     )
@@ -178,9 +201,9 @@ def _metadata_id(artifact: Artifact) -> Optional[str]:
 def _stable_artifact_id(artifact: Artifact) -> str:
     metadata_id = _metadata_id(artifact)
     if metadata_id:
-        return metadata_id
+        return f"metadata:{metadata_id}"
     path_digest = hashlib.sha1(artifact.path.encode("utf-8")).hexdigest()[:12]
-    return f"PATH-{path_digest}"
+    return f"path:{path_digest}"
 
 
 def _metadata_status(artifact: Artifact) -> str:
@@ -194,3 +217,8 @@ def _metadata_status(artifact: Artifact) -> str:
 def _problem_messages(problems: Iterable[ScanProblem]) -> Tuple[str, ...]:
     return tuple(problem.message for problem in problems)
 
+
+def _is_durable_registry_authority(artifact: Artifact) -> bool:
+    if artifact.metadata is None or not artifact.metadata.has_required_fields:
+        return False
+    return artifact.artifact_type in DURABLE_REGISTRY_AUTHORITY_TYPES

@@ -1,3 +1,14 @@
+# Sprint 3 Example Execution
+
+## Command
+
+```text
+PYTHONPATH=src python3 -m project_conductor.cli --root tests/fixtures/repository-scanner/basic-repo --registry-json
+```
+
+## Output
+
+```json
 {
   "artifact_count": 2,
   "artifacts": [
@@ -40,3 +51,4 @@
     ]
   }
 }
+```

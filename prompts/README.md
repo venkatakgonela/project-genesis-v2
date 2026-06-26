@@ -21,3 +21,5 @@ Prompts are source inputs, not approved architecture. Durable decisions, plans, 
 | `2026-06-25-wp-007-deterministic-project-conductor-foundation-decisions.md` | WP-007 deterministic Project Conductor foundation decisions prompt. |
 | `2026-06-25-wp-008-deterministic-project-conductor-mvp-implementation.md` | WP-008 deterministic Project Conductor MVP Sprint 1 implementation prompt. |
 | `2026-06-25-wp-009-deterministic-project-conductor-mvp-sprint-2.md` | WP-009 deterministic Project Conductor MVP Sprint 2 Artifact Registry Model prompt. |
+| `2026-06-25-wp-010-deterministic-project-conductor-mvp-sprint-3.md` | WP-010 deterministic Project Conductor MVP Sprint 3 metadata contract and registry schema prompt. |
+| `2026-06-26-wp-011-repository-state-model-sprint-4.md` | WP-011 deterministic Project Conductor MVP Sprint 4 Repository State Model prompt. |

@@ -10,6 +10,7 @@ from typing import Optional, Sequence
 
 from project_conductor.registry import build_artifact_registry
 from project_conductor.scanner import RepositoryScanError, scan_repository
+from project_conductor.state import build_repository_state
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the Artifact Registry representation as deterministic JSON.",
     )
+    parser.add_argument(
+        "--state-json",
+        action="store_true",
+        help="Print the Repository State representation as deterministic JSON.",
+    )
     return parser
 
 
@@ -47,6 +53,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.registry_json:
         registry = build_artifact_registry(scan)
         sys.stdout.write(registry.to_json())
+        return 0
+
+    if args.state_json:
+        registry = build_artifact_registry(scan)
+        state = build_repository_state(registry)
+        sys.stdout.write(state.to_json())
         return 0
 
     if args.json:

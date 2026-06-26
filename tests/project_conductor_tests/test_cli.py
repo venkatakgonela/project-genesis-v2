@@ -54,8 +54,26 @@ class RepositoryScannerCliTests(unittest.TestCase):
             )
 
             payload = json.loads(result.stdout)
-            self.assertEqual(payload["registry_version"], "0.1.0")
+            self.assertEqual(payload["registry_version"], "0.2.0")
+            self.assertEqual(payload["registry_schema_version"], "1.0.0")
             self.assertEqual(payload["source_provider"], "filesystem")
+
+    def test_cli_outputs_repository_state_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "README.md").write_text("# Fixture\n\n", encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, "-m", "project_conductor.cli", "--root", str(root), "--state-json"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["version"]["repository_state_version"], "0.1.0")
+            self.assertEqual(payload["generator"]["generated_at"], "1970-01-01T00:00:00Z")
+            self.assertEqual(payload["repository"]["source_provider"], "filesystem")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,676 @@
+diff --git a/src/project_conductor/__init__.py b/src/project_conductor/__init__.py
+index c53dfd5..55fc98f 100644
+--- a/src/project_conductor/__init__.py
++++ b/src/project_conductor/__init__.py
+@@ -8,6 +8,11 @@ from project_conductor.registry import (
+     validate_registry_artifacts,
+ )
+ 
++from project_conductor.metadata_contract import (
++    MetadataContract,
++    default_metadata_contract,
++)
++
+ from project_conductor.scanner import (
+     Artifact,
+     MetadataTable,
+@@ -17,16 +22,45 @@ from project_conductor.scanner import (
+     scan_repository,
+ )
+ 
++from project_conductor.state import (
++    GeneratorInformation,
++    MetadataSummary,
++    RepositoryState,
++    RepositoryStateBuilder,
++    RepositoryStateValidationReport,
++    RepositoryStateValidator,
++    RepositoryStatistics,
++    RepositorySummary,
++    ValidationSummary,
++    VersionInformation,
++    build_repository_state,
++    validate_repository_state,
++)
++
+ __all__ = [
+     "Artifact",
+     "ArtifactRegistry",
++    "GeneratorInformation",
+     "MetadataTable",
++    "MetadataContract",
++    "MetadataSummary",
+     "RepositoryScan",
+     "RepositoryScanError",
++    "RepositoryState",
++    "RepositoryStateBuilder",
++    "RepositoryStateValidationReport",
++    "RepositoryStateValidator",
++    "RepositoryStatistics",
++    "RepositorySummary",
+     "RegistryArtifact",
+     "RegistryValidationReport",
+     "ScanProblem",
++    "ValidationSummary",
++    "VersionInformation",
+     "build_artifact_registry",
++    "build_repository_state",
++    "default_metadata_contract",
+     "scan_repository",
+     "validate_registry_artifacts",
++    "validate_repository_state",
+ ]
+diff --git a/src/project_conductor/cli.py b/src/project_conductor/cli.py
+index b8e467a..c36f026 100644
+--- a/src/project_conductor/cli.py
++++ b/src/project_conductor/cli.py
+@@ -10,6 +10,7 @@ from typing import Optional, Sequence
+ 
+ from project_conductor.registry import build_artifact_registry
+ from project_conductor.scanner import RepositoryScanError, scan_repository
++from project_conductor.state import build_repository_state
+ 
+ 
+ def build_parser() -> argparse.ArgumentParser:
+@@ -32,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
+         action="store_true",
+         help="Print the Artifact Registry representation as deterministic JSON.",
+     )
++    parser.add_argument(
++        "--state-json",
++        action="store_true",
++        help="Print the Repository State representation as deterministic JSON.",
++    )
+     return parser
+ 
+ 
+@@ -49,6 +55,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
+         sys.stdout.write(registry.to_json())
+         return 0
+ 
++    if args.state_json:
++        registry = build_artifact_registry(scan)
++        state = build_repository_state(registry)
++        sys.stdout.write(state.to_json())
++        return 0
++
+     if args.json:
+         json.dump(scan.to_dict(), sys.stdout, indent=2, sort_keys=True)
+         sys.stdout.write("\n")
+diff --git a/src/project_conductor/state.py b/src/project_conductor/state.py
+new file mode 100644
+index 0000000..8ad45c2
+--- /dev/null
++++ b/src/project_conductor/state.py
+@@ -0,0 +1,349 @@
++"""Repository State Model for deterministic Project Conductor."""
++
++from __future__ import annotations
++
++import json
++from dataclasses import dataclass
++from typing import Dict, Iterable, List, Sequence, Tuple
++
++from project_conductor.registry import ArtifactRegistry, RegistryArtifact, RegistryValidationReport
++
++
++REPOSITORY_STATE_VERSION = "0.1.0"
++GENERATOR_NAME = "project-conductor-repository-state-builder"
++GENERATOR_VERSION = "0.1.0"
++DETERMINISTIC_GENERATED_AT = "1970-01-01T00:00:00Z"
++
++
++@dataclass(frozen=True)
++class CountByKey:
++    """Deterministic count for a named classification."""
++
++    key: str
++    count: int
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "key": self.key,
++            "count": self.count,
++        }
++
++
++@dataclass(frozen=True)
++class RepositorySummary:
++    """Provider-independent summary of the current repository snapshot."""
++
++    source_provider: str
++    artifact_count: int
++    durable_artifact_count: int
++    problem_count: int
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "source_provider": self.source_provider,
++            "artifact_count": self.artifact_count,
++            "durable_artifact_count": self.durable_artifact_count,
++            "problem_count": self.problem_count,
++        }
++
++
++@dataclass(frozen=True)
++class RepositoryStatistics:
++    """Deterministic aggregate statistics for a repository state."""
++
++    artifact_count: int
++    durable_artifact_count: int
++    metadata_backed_artifact_count: int
++    metadata_free_artifact_count: int
++    artifact_types: Tuple[CountByKey, ...]
++    metadata_statuses: Tuple[CountByKey, ...]
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "artifact_count": self.artifact_count,
++            "durable_artifact_count": self.durable_artifact_count,
++            "metadata_backed_artifact_count": self.metadata_backed_artifact_count,
++            "metadata_free_artifact_count": self.metadata_free_artifact_count,
++            "artifact_types": [item.to_dict() for item in self.artifact_types],
++            "metadata_statuses": [item.to_dict() for item in self.metadata_statuses],
++        }
++
++
++@dataclass(frozen=True)
++class MetadataSummary:
++    """Metadata completeness and durability summary."""
++
++    complete_count: int
++    incomplete_count: int
++    missing_count: int
++    metadata_backed_artifact_count: int
++    metadata_free_artifact_count: int
++    durable_artifact_count: int
++    non_durable_artifact_count: int
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "complete_count": self.complete_count,
++            "incomplete_count": self.incomplete_count,
++            "missing_count": self.missing_count,
++            "metadata_backed_artifact_count": self.metadata_backed_artifact_count,
++            "metadata_free_artifact_count": self.metadata_free_artifact_count,
++            "durable_artifact_count": self.durable_artifact_count,
++            "non_durable_artifact_count": self.non_durable_artifact_count,
++        }
++
++
++@dataclass(frozen=True)
++class ValidationSummary:
++    """Compact validation status for the repository state."""
++
++    valid: bool
++    error_count: int
++    warning_count: int
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "valid": self.valid,
++            "error_count": self.error_count,
++            "warning_count": self.warning_count,
++        }
++
++
++@dataclass(frozen=True)
++class GeneratorInformation:
++    """Information about the deterministic state generator."""
++
++    name: str
++    version: str
++    generated_at: str
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "name": self.name,
++            "version": self.version,
++            "generated_at": self.generated_at,
++        }
++
++
++@dataclass(frozen=True)
++class VersionInformation:
++    """Version lineage for state, registry, and metadata contract."""
++
++    repository_state_version: str
++    registry_version: str
++    registry_schema_version: str
++    metadata_contract_version: str
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "repository_state_version": self.repository_state_version,
++            "registry_version": self.registry_version,
++            "registry_schema_version": self.registry_schema_version,
++            "metadata_contract_version": self.metadata_contract_version,
++        }
++
++
++@dataclass(frozen=True)
++class RepositoryStateValidationReport:
++    """Validation result for RepositoryState structure."""
++
++    valid: bool
++    errors: Tuple[str, ...] = ()
++    warnings: Tuple[str, ...] = ()
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "valid": self.valid,
++            "errors": list(self.errors),
++            "warnings": list(self.warnings),
++        }
++
++
++@dataclass(frozen=True)
++class RepositoryState:
++    """Deterministic current-state snapshot derived from ArtifactRegistry."""
++
++    version: VersionInformation
++    generator: GeneratorInformation
++    repository: RepositorySummary
++    statistics: RepositoryStatistics
++    metadata: MetadataSummary
++    validation_summary: ValidationSummary
++    validation: RepositoryStateValidationReport
++    registry_validation: RegistryValidationReport
++    artifacts: Tuple[RegistryArtifact, ...]
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "version": self.version.to_dict(),
++            "generator": self.generator.to_dict(),
++            "repository": self.repository.to_dict(),
++            "statistics": self.statistics.to_dict(),
++            "metadata": self.metadata.to_dict(),
++            "validation_summary": self.validation_summary.to_dict(),
++            "validation": self.validation.to_dict(),
++            "registry_validation": self.registry_validation.to_dict(),
++            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
++        }
++
++    def to_json(self) -> str:
++        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
++
++
++class RepositoryStateBuilder:
++    """Build RepositoryState solely from ArtifactRegistry."""
++
++    def build(
++        self,
++        registry: ArtifactRegistry,
++        *,
++        generated_at: str = DETERMINISTIC_GENERATED_AT,
++    ) -> RepositoryState:
++        artifacts = tuple(registry.artifacts)
++        metadata_summary = _build_metadata_summary(artifacts)
++        statistics = _build_repository_statistics(artifacts, metadata_summary=metadata_summary)
++        repository = RepositorySummary(
++            source_provider=registry.source_provider,
++            artifact_count=len(artifacts),
++            durable_artifact_count=metadata_summary.durable_artifact_count,
++            problem_count=sum(len(artifact.problems) for artifact in artifacts),
++        )
++        validation_summary = ValidationSummary(
++            valid=registry.validation.valid,
++            error_count=len(registry.validation.errors),
++            warning_count=len(registry.validation.warnings),
++        )
++        state_without_validation = RepositoryState(
++            version=VersionInformation(
++                repository_state_version=REPOSITORY_STATE_VERSION,
++                registry_version=registry.registry_version,
++                registry_schema_version=registry.registry_schema_version,
++                metadata_contract_version=registry.metadata_contract_version,
++            ),
++            generator=GeneratorInformation(
++                name=GENERATOR_NAME,
++                version=GENERATOR_VERSION,
++                generated_at=generated_at,
++            ),
++            repository=repository,
++            statistics=statistics,
++            metadata=metadata_summary,
++            validation_summary=validation_summary,
++            validation=RepositoryStateValidationReport(valid=True),
++            registry_validation=registry.validation,
++            artifacts=artifacts,
++        )
++        validation = RepositoryStateValidator().validate(state_without_validation)
++        return RepositoryState(
++            version=state_without_validation.version,
++            generator=state_without_validation.generator,
++            repository=state_without_validation.repository,
++            statistics=state_without_validation.statistics,
++            metadata=state_without_validation.metadata,
++            validation_summary=state_without_validation.validation_summary,
++            validation=validation,
++            registry_validation=state_without_validation.registry_validation,
++            artifacts=state_without_validation.artifacts,
++        )
++
++
++class RepositoryStateValidator:
++    """Validate RepositoryState structure without running quality gates."""
++
++    def validate(self, state: RepositoryState) -> RepositoryStateValidationReport:
++        errors: List[str] = []
++        warnings: List[str] = []
++
++        if state.version.repository_state_version != REPOSITORY_STATE_VERSION:
++            errors.append(
++                "repository_state_version "
++                f"{state.version.repository_state_version!r} does not match {REPOSITORY_STATE_VERSION!r}"
++            )
++        if state.generator.name != GENERATOR_NAME:
++            errors.append(f"generator name {state.generator.name!r} is not recognized")
++        if not state.generator.generated_at:
++            errors.append("generator generated_at is empty")
++        if state.repository.artifact_count != len(state.artifacts):
++            errors.append("repository artifact_count does not match artifacts")
++        if state.statistics.artifact_count != len(state.artifacts):
++            errors.append("statistics artifact_count does not match artifacts")
++        if state.validation_summary.error_count != len(state.registry_validation.errors):
++            errors.append("validation_summary error_count does not match registry validation")
++        if state.validation_summary.warning_count != len(state.registry_validation.warnings):
++            errors.append("validation_summary warning_count does not match registry validation")
++
++        expected_metadata = _build_metadata_summary(state.artifacts)
++        if state.metadata != expected_metadata:
++            errors.append("metadata summary does not match artifacts")
++
++        expected_statistics = _build_repository_statistics(state.artifacts, metadata_summary=expected_metadata)
++        if state.statistics != expected_statistics:
++            errors.append("repository statistics do not match artifacts")
++
++        previous_path = ""
++        for artifact in state.artifacts:
++            if artifact.path < previous_path:
++                errors.append(f"repository state artifact ordering is not deterministic at {artifact.path!r}")
++                break
++            previous_path = artifact.path
++
++        if state.repository.problem_count:
++            warnings.append(f"repository state includes {state.repository.problem_count} artifact problem(s)")
++        if state.registry_validation.warnings:
++            warnings.extend(state.registry_validation.warnings)
++
++        return RepositoryStateValidationReport(valid=not errors, errors=tuple(errors), warnings=tuple(warnings))
++
++
++def build_repository_state(registry: ArtifactRegistry) -> RepositoryState:
++    """Build deterministic RepositoryState from an ArtifactRegistry."""
++
++    return RepositoryStateBuilder().build(registry)
++
++
++def validate_repository_state(state: RepositoryState) -> RepositoryStateValidationReport:
++    """Validate deterministic RepositoryState structure."""
++
++    return RepositoryStateValidator().validate(state)
++
++
++def _build_metadata_summary(artifacts: Sequence[RegistryArtifact]) -> MetadataSummary:
++    status_counts = _count_by_key(artifact.metadata_status for artifact in artifacts)
++    metadata_backed_count = sum(1 for artifact in artifacts if artifact.metadata_id is not None)
++    durable_count = sum(1 for artifact in artifacts if artifact.durable)
++    return MetadataSummary(
++        complete_count=status_counts.get("complete", 0),
++        incomplete_count=status_counts.get("incomplete", 0),
++        missing_count=status_counts.get("missing", 0),
++        metadata_backed_artifact_count=metadata_backed_count,
++        metadata_free_artifact_count=len(artifacts) - metadata_backed_count,
++        durable_artifact_count=durable_count,
++        non_durable_artifact_count=len(artifacts) - durable_count,
++    )
++
++
++def _build_repository_statistics(
++    artifacts: Sequence[RegistryArtifact],
++    *,
++    metadata_summary: MetadataSummary,
++) -> RepositoryStatistics:
++    return RepositoryStatistics(
++        artifact_count=len(artifacts),
++        durable_artifact_count=metadata_summary.durable_artifact_count,
++        metadata_backed_artifact_count=metadata_summary.metadata_backed_artifact_count,
++        metadata_free_artifact_count=metadata_summary.metadata_free_artifact_count,
++        artifact_types=_count_items(artifact.artifact_type for artifact in artifacts),
++        metadata_statuses=_count_items(artifact.metadata_status for artifact in artifacts),
++    )
++
++
++def _count_items(values: Iterable[str]) -> Tuple[CountByKey, ...]:
++    counts = _count_by_key(values)
++    return tuple(CountByKey(key=key, count=counts[key]) for key in sorted(counts))
++
++
++def _count_by_key(values: Iterable[str]) -> Dict[str, int]:
++    counts: Dict[str, int] = {}
++    for value in values:
++        counts[value] = counts.get(value, 0) + 1
++    return counts
+diff --git a/tests/fixtures/repository-scanner/expected-repository-state.json b/tests/fixtures/repository-scanner/expected-repository-state.json
+new file mode 100644
+index 0000000..a516b2c
+--- /dev/null
++++ b/tests/fixtures/repository-scanner/expected-repository-state.json
+@@ -0,0 +1,102 @@
++{
++  "artifacts": [
++    {
++      "artifact_id": "metadata:FIXTURE-001",
++      "durable": true,
++      "hash": "ce66feadc5372b565dfd32e002ae98c7788c5ec223d02b1a000af444cf998242",
++      "metadata_id": "FIXTURE-001",
++      "metadata_status": "complete",
++      "path": "README.md",
++      "problems": [],
++      "source_provider": "filesystem",
++      "title": "Fixture Repository",
++      "type": "repository"
++    },
++    {
++      "artifact_id": "path:ce3a89079780",
++      "durable": false,
++      "hash": "b47ab94694f21363850d9da2c618e9798f7562b9c2bb00b3ba5d8430d852cccf",
++      "metadata_id": null,
++      "metadata_status": "missing",
++      "path": "docs/no-metadata.md",
++      "problems": [
++        "metadata section not found"
++      ],
++      "source_provider": "filesystem",
++      "title": "No Metadata",
++      "type": "documentation"
++    }
++  ],
++  "generator": {
++    "generated_at": "1970-01-01T00:00:00Z",
++    "name": "project-conductor-repository-state-builder",
++    "version": "0.1.0"
++  },
++  "metadata": {
++    "complete_count": 1,
++    "durable_artifact_count": 1,
++    "incomplete_count": 0,
++    "metadata_backed_artifact_count": 1,
++    "metadata_free_artifact_count": 1,
++    "missing_count": 1,
++    "non_durable_artifact_count": 1
++  },
++  "registry_validation": {
++    "errors": [],
++    "valid": true,
++    "warnings": [
++      "artifact 'docs/no-metadata.md' metadata_status is missing"
++    ]
++  },
++  "repository": {
++    "artifact_count": 2,
++    "durable_artifact_count": 1,
++    "problem_count": 1,
++    "source_provider": "filesystem"
++  },
++  "statistics": {
++    "artifact_count": 2,
++    "artifact_types": [
++      {
++        "count": 1,
++        "key": "documentation"
++      },
++      {
++        "count": 1,
++        "key": "repository"
++      }
++    ],
++    "durable_artifact_count": 1,
++    "metadata_backed_artifact_count": 1,
++    "metadata_free_artifact_count": 1,
++    "metadata_statuses": [
++      {
++        "count": 1,
++        "key": "complete"
++      },
++      {
++        "count": 1,
++        "key": "missing"
++      }
++    ]
++  },
++  "validation": {
++    "errors": [],
++    "valid": true,
++    "warnings": [
++      "repository state includes 1 artifact problem(s)",
++      "artifact 'docs/no-metadata.md' metadata_status is missing"
++    ]
++  },
++  "validation_summary": {
++    "error_count": 0,
++    "valid": true,
++    "warning_count": 1
++  },
++  "version": {
++    "metadata_contract_version": "1.0.0",
++    "registry_schema_version": "1.0.0",
++    "registry_version": "0.2.0",
++    "repository_state_version": "0.1.0"
++  }
++}
+diff --git a/tests/project_conductor_tests/test_cli.py b/tests/project_conductor_tests/test_cli.py
+index e28842c..42b5584 100644
+--- a/tests/project_conductor_tests/test_cli.py
++++ b/tests/project_conductor_tests/test_cli.py
+@@ -54,9 +54,27 @@ class RepositoryScannerCliTests(unittest.TestCase):
+             )
+ 
+             payload = json.loads(result.stdout)
+-            self.assertEqual(payload["registry_version"], "0.1.0")
++            self.assertEqual(payload["registry_version"], "0.2.0")
++            self.assertEqual(payload["registry_schema_version"], "1.0.0")
+             self.assertEqual(payload["source_provider"], "filesystem")
+ 
++    def test_cli_outputs_repository_state_json(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = Path(temp_dir)
++            (root / "README.md").write_text("# Fixture\n\n", encoding="utf-8")
++
++            result = subprocess.run(
++                [sys.executable, "-m", "project_conductor.cli", "--root", str(root), "--state-json"],
++                check=True,
++                capture_output=True,
++                text=True,
++            )
++
++            payload = json.loads(result.stdout)
++            self.assertEqual(payload["version"]["repository_state_version"], "0.1.0")
++            self.assertEqual(payload["generator"]["generated_at"], "1970-01-01T00:00:00Z")
++            self.assertEqual(payload["repository"]["source_provider"], "filesystem")
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/project_conductor_tests/test_state.py b/tests/project_conductor_tests/test_state.py
+new file mode 100644
+index 0000000..19fca1d
+--- /dev/null
++++ b/tests/project_conductor_tests/test_state.py
+@@ -0,0 +1,75 @@
++from __future__ import annotations
++
++import unittest
++from dataclasses import replace
++from pathlib import Path
++
++from project_conductor.registry import build_artifact_registry
++from project_conductor.scanner import scan_repository
++from project_conductor.state import (
++    DETERMINISTIC_GENERATED_AT,
++    RepositoryStateBuilder,
++    RepositoryStateValidator,
++    build_repository_state,
++)
++
++
++FIXTURE_ROOT = Path("tests/fixtures/repository-scanner/basic-repo")
++GOLDEN_STATE = Path("tests/fixtures/repository-scanner/expected-repository-state.json")
++
++
++def _build_fixture_state():
++    registry = build_artifact_registry(scan_repository(FIXTURE_ROOT))
++    return build_repository_state(registry)
++
++
++class RepositoryStateTests(unittest.TestCase):
++    def test_builds_repository_state_from_artifact_registry(self) -> None:
++        state = _build_fixture_state()
++
++        self.assertEqual(state.version.repository_state_version, "0.1.0")
++        self.assertEqual(state.version.registry_version, "0.2.0")
++        self.assertEqual(state.generator.generated_at, DETERMINISTIC_GENERATED_AT)
++        self.assertEqual(state.repository.artifact_count, 2)
++        self.assertEqual(state.repository.durable_artifact_count, 1)
++        self.assertEqual(state.repository.problem_count, 1)
++        self.assertEqual(state.metadata.complete_count, 1)
++        self.assertEqual(state.metadata.missing_count, 1)
++        self.assertEqual(state.validation_summary.warning_count, 1)
++        self.assertTrue(state.validation.valid)
++
++    def test_repository_state_json_matches_golden_output(self) -> None:
++        state = _build_fixture_state()
++
++        self.assertEqual(state.to_json(), GOLDEN_STATE.read_text(encoding="utf-8"))
++
++    def test_repository_state_json_is_deterministic(self) -> None:
++        registry = build_artifact_registry(scan_repository(FIXTURE_ROOT))
++
++        first = RepositoryStateBuilder().build(registry).to_json()
++        second = RepositoryStateBuilder().build(registry).to_json()
++
++        self.assertEqual(first, second)
++
++    def test_repository_state_validator_detects_summary_mismatch(self) -> None:
++        state = _build_fixture_state()
++        invalid_repository = replace(state.repository, artifact_count=99)
++        invalid_state = replace(state, repository=invalid_repository)
++
++        report = RepositoryStateValidator().validate(invalid_state)
++
++        self.assertFalse(report.valid)
++        self.assertIn("repository artifact_count does not match artifacts", report.errors)
++
++    def test_repository_state_validator_detects_nondeterministic_artifact_order(self) -> None:
++        state = _build_fixture_state()
++        invalid_state = replace(state, artifacts=tuple(reversed(state.artifacts)))
++
++        report = RepositoryStateValidator().validate(invalid_state)
++
++        self.assertFalse(report.valid)
++        self.assertIn("repository state artifact ordering is not deterministic at 'README.md'", report.errors)
++
++
++if __name__ == "__main__":
++    unittest.main()

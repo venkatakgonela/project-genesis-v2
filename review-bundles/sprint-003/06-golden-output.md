@@ -1,3 +1,8 @@
+# Sprint 3 Golden Registry Output
+
+Source file: `tests/fixtures/repository-scanner/expected-artifact-registry.json`
+
+```json
 {
   "artifact_count": 2,
   "artifacts": [
@@ -40,3 +45,4 @@
     ]
   }
 }
+```

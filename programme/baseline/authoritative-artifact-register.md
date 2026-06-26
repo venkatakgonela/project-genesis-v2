@@ -13,7 +13,7 @@
 | Updated Date | 2026-06-25 |
 | Dependencies | BASE-001 |
 | Related ADRs | ADR-001, ADR-002, ADR-012 |
-| Related Work Packages | WP-004, WP-006, WP-007, WP-008, WP-009 |
+| Related Work Packages | WP-004, WP-006, WP-007, WP-008, WP-009, WP-010 |
 | Tags | artifact-register, baseline, authority |
 | Review Date | 2026-07-02 |
 
@@ -51,6 +51,7 @@ This register identifies the authoritative source for each engineering concern a
 | Deterministic Project Conductor foundation decisions | `technology-radar/deterministic-conductor-foundation/` | `programme/work-packages/WP-007-deterministic-project-conductor-foundation-decisions.md`, ADR-DRAFT-013 through ADR-DRAFT-016 | Authoritative recommendation package for deterministic Project Conductor MVP foundation decisions until ADRs are reviewed. |
 | Project Conductor Sprint 1 implementation | `programme/work-packages/project-conductor-sprints/sprint-001-repository-scanner/` | `src/project_conductor/`, `tests/project_conductor_tests/`, `programme/work-packages/WP-008-deterministic-project-conductor-mvp-implementation.md` | Authoritative Sprint 1 review, evidence, and documentation package for the repository scanner slice. |
 | Project Conductor Sprint 2 implementation | `programme/work-packages/project-conductor-sprints/sprint-002-artifact-registry/` | `src/project_conductor/registry.py`, `tests/project_conductor_tests/test_registry.py`, `programme/work-packages/WP-009-deterministic-project-conductor-mvp-sprint-2-artifact-registry.md` | Authoritative Sprint 2 review, evidence, and documentation package for the Artifact Registry Model slice. |
+| Project Conductor Sprint 3 implementation | `programme/work-packages/project-conductor-sprints/sprint-003-metadata-contract-registry-schema/` | `src/project_conductor/metadata_contract.py`, `src/project_conductor/registry.py`, `programme/work-packages/WP-010-deterministic-project-conductor-mvp-sprint-3-metadata-contract-registry-schema.md` | Authoritative Sprint 3 review, evidence, metadata contract, and registry schema package. |
 | Platform specifications | `platform/*/specs/architecture-specification.md` | Architecture baseline, ADRs | Specifications are authoritative per capability until replaced by approved architecture revisions. |
 | Project Conductor product definition | `platform/project-conductor/product/product-definition-and-operating-model.md` | `platform/project-conductor/specs/architecture-specification.md`, `programme/work-packages/WP-006-project-conductor-product-definition-operating-model.md` | Authoritative product definition and operating model for Project Conductor. Does not replace architecture specifications or ADRs. |
 | Evaluation platform scaffold | `evaluation/README.md` | Evaluation subfolder READMEs | Authoritative for evaluation folder structure only, not evaluation execution. |

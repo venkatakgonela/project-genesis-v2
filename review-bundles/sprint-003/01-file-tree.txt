@@ -1,0 +1,65 @@
+review-bundles/sprint-003/
+  00-context.md
+  01-file-tree.txt
+  02-changed-files.patch
+  03-test-results.md
+  04-coverage-summary.md
+  05-example-execution.md
+  06-golden-output.md
+  07-validation-report.md
+  08-known-limitations.md
+  09-architecture-review-package.md
+  10-code-review-package.md
+  11-evidence-package.md
+  12-architecture-review-checklist.md
+  13-chief-architect-questions.md
+  14-suggested-git-commit-message.md
+  15-suggested-pull-request-description.md
+
+src/project_conductor/
+  __init__.py
+  metadata_contract.py
+  registry.py
+  scanner.py
+
+tests/project_conductor_tests/
+  test_cli.py
+  test_registry.py
+
+tests/fixtures/repository-scanner/
+  expected-artifact-registry.json
+  basic-repo/
+    README.md
+    docs/no-metadata.md
+
+programme/work-packages/
+  WP-010-deterministic-project-conductor-mvp-sprint-3-metadata-contract-registry-schema.md
+  project-conductor-sprints/sprint-003-metadata-contract-registry-schema/
+    README.md
+    sprint-design.md
+    technical-design.md
+    metadata-contract.md
+    registry-schema.md
+    sprint-report.md
+    evidence/
+      coverage-summary.md
+      example-execution.md
+      golden-output.md
+      known-limitations.md
+      test-results.md
+      validation-report.md
+    review/
+      architecture-review-checklist.md
+      architecture-review-package.md
+      chief-architect-questions.md
+      code-review-package.md
+      evidence-package.md
+      suggested-git-commit-message.md
+      suggested-pull-request-description.md
+
+prompts/
+  2026-06-25-wp-010-deterministic-project-conductor-mvp-sprint-3.md
+  README.md
+
+programme/baseline/
+  authoritative-artifact-register.md

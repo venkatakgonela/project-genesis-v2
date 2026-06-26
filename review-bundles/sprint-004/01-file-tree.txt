@@ -1,0 +1,55 @@
+review-bundles/sprint-004/
+  00-context.md
+  01-file-tree.txt
+  02-changed-files.patch
+  03-test-results.md
+  04-coverage-summary.md
+  05-example-execution.md
+  06-golden-output.md
+  07-validation-report.md
+  08-known-limitations.md
+  09-architecture-review-package.md
+  10-code-review-package.md
+  11-evidence-package.md
+  12-architecture-review-checklist.md
+  13-chief-architect-questions.md
+  14-suggested-git-commit-message.md
+  15-suggested-pull-request-description.md
+  16-decision-log.md
+
+src/project_conductor/
+  __init__.py
+  cli.py
+  state.py
+
+tests/project_conductor_tests/
+  test_cli.py
+  test_state.py
+
+tests/fixtures/repository-scanner/
+  expected-repository-state.json
+
+programme/work-packages/
+  WP-011-deterministic-project-conductor-mvp-sprint-4-repository-state-model.md
+  project-conductor-sprints/sprint-004-repository-state-model/
+    README.md
+    sprint-design.md
+    technical-design.md
+    architecture-notes.md
+    design-rationale.md
+    repository-state-specification.md
+    developer-notes.md
+    sprint-report.md
+    evidence/
+      coverage-summary.md
+      determinism-evidence.md
+      example-execution.md
+      golden-output.md
+      known-limitations.md
+      performance-summary.md
+      test-results.md
+      validation-report.md
+
+prompts/
+  2026-06-26-wp-011-repository-state-model-sprint-4.md
+  README.md

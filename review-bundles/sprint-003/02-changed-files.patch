@@ -1,0 +1,472 @@
+diff --git a/src/project_conductor/__init__.py b/src/project_conductor/__init__.py
+index c53dfd5..3bc4dc9 100644
+--- a/src/project_conductor/__init__.py
++++ b/src/project_conductor/__init__.py
+@@ -8,6 +8,11 @@ from project_conductor.registry import (
+     validate_registry_artifacts,
+ )
+ 
++from project_conductor.metadata_contract import (
++    MetadataContract,
++    default_metadata_contract,
++)
++
+ from project_conductor.scanner import (
+     Artifact,
+     MetadataTable,
+@@ -21,12 +26,14 @@ __all__ = [
+     "Artifact",
+     "ArtifactRegistry",
+     "MetadataTable",
++    "MetadataContract",
+     "RepositoryScan",
+     "RepositoryScanError",
+     "RegistryArtifact",
+     "RegistryValidationReport",
+     "ScanProblem",
+     "build_artifact_registry",
++    "default_metadata_contract",
+     "scan_repository",
+     "validate_registry_artifacts",
+ ]
+diff --git a/src/project_conductor/metadata_contract.py b/src/project_conductor/metadata_contract.py
+new file mode 100644
+index 0000000..e41c25d
+--- /dev/null
++++ b/src/project_conductor/metadata_contract.py
+@@ -0,0 +1,84 @@
++"""Versioned metadata contract for Project Conductor registry artifacts."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Dict, Iterable, Tuple
++
++
++METADATA_CONTRACT_VERSION = "1.0.0"
++REGISTRY_SCHEMA_VERSION = "1.0.0"
++
++REQUIRED_METADATA_FIELDS: Tuple[str, ...] = (
++    "ID",
++    "Title",
++    "Version",
++    "Status",
++    "Owner",
++    "Created Date",
++    "Updated Date",
++    "Dependencies",
++    "Related ADRs",
++    "Related Work Packages",
++    "Tags",
++    "Review Date",
++)
++
++OPTIONAL_METADATA_FIELDS: Tuple[str, ...] = (
++    "Supersedes",
++    "Superseded By",
++    "Reviewers",
++    "Evidence",
++    "Lifecycle State",
++    "Schema Version",
++)
++
++ALLOWED_METADATA_STATUSES = frozenset({"complete", "incomplete", "missing"})
++
++DURABLE_REGISTRY_AUTHORITY_TYPES = frozenset(
++    {
++        "adr",
++        "architecture",
++        "baseline",
++        "documentation",
++        "platform-product",
++        "platform-specification",
++        "programme",
++        "review",
++        "repository",
++        "technology-radar",
++        "template",
++        "work-package",
++    }
++)
++
++
++@dataclass(frozen=True)
++class MetadataContract:
++    """Versioned metadata contract used by the registry model."""
++
++    version: str
++    required_fields: Tuple[str, ...]
++    optional_fields: Tuple[str, ...]
++    allowed_metadata_statuses: Tuple[str, ...]
++    durable_registry_authority_types: Tuple[str, ...]
++
++    def to_dict(self) -> Dict[str, object]:
++        return {
++            "version": self.version,
++            "required_fields": list(self.required_fields),
++            "optional_fields": list(self.optional_fields),
++            "allowed_metadata_statuses": list(self.allowed_metadata_statuses),
++            "durable_registry_authority_types": list(self.durable_registry_authority_types),
++        }
++
++
++def default_metadata_contract() -> MetadataContract:
++    """Return the current Project Conductor metadata contract."""
++
++    return MetadataContract(
++        version=METADATA_CONTRACT_VERSION,
++        required_fields=REQUIRED_METADATA_FIELDS,
++        optional_fields=OPTIONAL_METADATA_FIELDS,
++        allowed_metadata_statuses=tuple(sorted(ALLOWED_METADATA_STATUSES)),
++        durable_registry_authority_types=tuple(sorted(DURABLE_REGISTRY_AUTHORITY_TYPES)),
++    )
++
++
++def missing_required_fields(fields: Iterable[str]) -> Tuple[str, ...]:
++    """Return required metadata fields absent from the provided field names."""
++
++    present = frozenset(fields)
++    return tuple(field for field in REQUIRED_METADATA_FIELDS if field not in present)
+diff --git a/src/project_conductor/registry.py b/src/project_conductor/registry.py
+index ba76b3a..6da0a1c 100644
+--- a/src/project_conductor/registry.py
++++ b/src/project_conductor/registry.py
+@@ -1,4 +1,4 @@
+-"""Artifact Registry Model for Project Conductor Sprint 2."""
++"""Artifact Registry Model for deterministic Project Conductor."""
+ 
+ from __future__ import annotations
+ 
+@@ -7,12 +7,17 @@ import json
+ from dataclasses import dataclass
+ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+ 
++from project_conductor.metadata_contract import (
++    ALLOWED_METADATA_STATUSES,
++    DURABLE_REGISTRY_AUTHORITY_TYPES,
++    REGISTRY_SCHEMA_VERSION,
++    default_metadata_contract,
++)
+ from project_conductor.scanner import Artifact, RepositoryScan, ScanProblem
+ 
+ 
+-REGISTRY_VERSION = "0.1.0"
++REGISTRY_VERSION = "0.2.0"
+ DEFAULT_SOURCE_PROVIDER = "filesystem"
+-VALID_METADATA_STATUSES = frozenset({"complete", "incomplete", "missing"})
+ 
+ 
+ @dataclass(frozen=True)
+@@ -26,6 +31,7 @@ class RegistryArtifact:
+     hash: str
+     metadata_status: str
+     metadata_id: Optional[str]
++    durable: bool
+     problems: Tuple[str, ...]
+     source_provider: str
+ 
+@@ -38,6 +44,7 @@ class RegistryArtifact:
+             "hash": self.hash,
+             "metadata_status": self.metadata_status,
+             "metadata_id": self.metadata_id,
++            "durable": self.durable,
+             "problems": list(self.problems),
+             "source_provider": self.source_provider,
+         }
+@@ -64,6 +71,8 @@ class ArtifactRegistry:
+     """Deterministic Artifact Registry representation."""
+ 
+     registry_version: str
++    registry_schema_version: str
++    metadata_contract_version: str
+     source_provider: str
+     artifacts: Tuple[RegistryArtifact, ...]
+     validation: RegistryValidationReport
+@@ -75,6 +84,8 @@ class ArtifactRegistry:
+     def to_dict(self) -> Dict[str, object]:
+         return {
+             "registry_version": self.registry_version,
++            "registry_schema_version": self.registry_schema_version,
++            "metadata_contract_version": self.metadata_contract_version,
+             "source_provider": self.source_provider,
+             "artifact_count": self.artifact_count,
+             "validation": self.validation.to_dict(),
+@@ -99,8 +110,11 @@ def build_artifact_registry(
+         )
+     )
+     validation = validate_registry_artifacts(artifacts, source_provider=source_provider)
++    metadata_contract = default_metadata_contract()
+     return ArtifactRegistry(
+         registry_version=REGISTRY_VERSION,
++        registry_schema_version=REGISTRY_SCHEMA_VERSION,
++        metadata_contract_version=metadata_contract.version,
+         source_provider=source_provider,
+         artifacts=artifacts,
+         validation=validation,
+@@ -139,8 +153,16 @@ def validate_registry_artifacts(
+             errors.append(f"artifact {artifact.path!r} has empty type")
+         if not artifact.hash:
+             errors.append(f"artifact {artifact.path!r} has empty hash")
+-        if artifact.metadata_status not in VALID_METADATA_STATUSES:
++        if artifact.metadata_status not in ALLOWED_METADATA_STATUSES:
+             errors.append(f"artifact {artifact.path!r} has invalid metadata_status {artifact.metadata_status!r}")
++        if artifact.metadata_id and not artifact.artifact_id.startswith("metadata:"):
++            errors.append(f"artifact {artifact.path!r} metadata-backed artifact_id must start with 'metadata:'")
++        if artifact.metadata_id is None and not artifact.artifact_id.startswith("path:"):
++            errors.append(f"artifact {artifact.path!r} path-backed artifact_id must start with 'path:'")
++        if artifact.metadata_status == "missing" and artifact.durable:
++            errors.append(f"artifact {artifact.path!r} cannot be durable without metadata")
++        if artifact.durable and artifact.artifact_type not in DURABLE_REGISTRY_AUTHORITY_TYPES:
++            errors.append(f"artifact {artifact.path!r} type {artifact.artifact_type!r} is not a durable authority type")
+         if artifact.source_provider != source_provider:
+             errors.append(
+                 f"artifact {artifact.path!r} source_provider {artifact.source_provider!r} does not match registry provider"
+@@ -161,6 +183,7 @@ def _to_registry_artifact(artifact: Artifact, *, source_provider: str) -> Regist
+         hash=artifact.sha256,
+         metadata_status=_metadata_status(artifact),
+         metadata_id=metadata_id,
++        durable=_is_durable_registry_authority(artifact),
+         problems=_problem_messages(artifact.problems),
+         source_provider=source_provider,
+     )
+@@ -178,9 +201,9 @@ def _metadata_id(artifact: Artifact) -> Optional[str]:
+ def _stable_artifact_id(artifact: Artifact) -> str:
+     metadata_id = _metadata_id(artifact)
+     if metadata_id:
+-        return metadata_id
++        return f"metadata:{metadata_id}"
+     path_digest = hashlib.sha1(artifact.path.encode("utf-8")).hexdigest()[:12]
+-    return f"PATH-{path_digest}"
++    return f"path:{path_digest}"
+ 
+ 
+ def _metadata_status(artifact: Artifact) -> str:
+@@ -194,3 +217,8 @@ def _metadata_status(artifact: Artifact) -> str:
+ def _problem_messages(problems: Iterable[ScanProblem]) -> Tuple[str, ...]:
+     return tuple(problem.message for problem in problems)
+ 
++
++def _is_durable_registry_authority(artifact: Artifact) -> bool:
++    if artifact.metadata is None or not artifact.metadata.has_required_fields:
++        return False
++    return artifact.artifact_type in DURABLE_REGISTRY_AUTHORITY_TYPES
+diff --git a/src/project_conductor/scanner.py b/src/project_conductor/scanner.py
+index 2196dd3..51c9f4e 100644
+--- a/src/project_conductor/scanner.py
++++ b/src/project_conductor/scanner.py
+@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
+ from pathlib import Path
+ from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
+ 
++from project_conductor.metadata_contract import REQUIRED_METADATA_FIELDS
++
+ 
+ DEFAULT_ARTIFACT_SUFFIXES: Tuple[str, ...] = (".md",)
+ DEFAULT_EXCLUDED_DIRECTORIES = frozenset(
+@@ -21,22 +23,6 @@ DEFAULT_EXCLUDED_DIRECTORIES = frozenset(
+         "node_modules",
+     }
+ )
+-REQUIRED_METADATA_FIELDS: Tuple[str, ...] = (
+-    "ID",
+-    "Title",
+-    "Version",
+-    "Status",
+-    "Owner",
+-    "Created Date",
+-    "Updated Date",
+-    "Dependencies",
+-    "Related ADRs",
+-    "Related Work Packages",
+-    "Tags",
+-    "Review Date",
+-)
+-
+-
+ class RepositoryScanError(ValueError):
+     """Raised when a repository scan cannot be started."""
+ 
+diff --git a/tests/fixtures/repository-scanner/expected-artifact-registry.json b/tests/fixtures/repository-scanner/expected-artifact-registry.json
+index d7c24b0..4f7ef9d 100644
+--- a/tests/fixtures/repository-scanner/expected-artifact-registry.json
++++ b/tests/fixtures/repository-scanner/expected-artifact-registry.json
+@@ -2,7 +2,8 @@
+   "artifact_count": 2,
+   "artifacts": [
+     {
+-      "artifact_id": "FIXTURE-001",
++      "artifact_id": "metadata:FIXTURE-001",
++      "durable": true,
+       "hash": "ce66feadc5372b565dfd32e002ae98c7788c5ec223d02b1a000af444cf998242",
+       "metadata_id": "FIXTURE-001",
+       "metadata_status": "complete",
+@@ -13,7 +14,8 @@
+       "type": "repository"
+     },
+     {
+-      "artifact_id": "PATH-ce3a89079780",
++      "artifact_id": "path:ce3a89079780",
++      "durable": false,
+       "hash": "b47ab94694f21363850d9da2c618e9798f7562b9c2bb00b3ba5d8430d852cccf",
+       "metadata_id": null,
+       "metadata_status": "missing",
+@@ -26,7 +28,9 @@
+       "type": "documentation"
+     }
+   ],
+-  "registry_version": "0.1.0",
++  "metadata_contract_version": "1.0.0",
++  "registry_schema_version": "1.0.0",
++  "registry_version": "0.2.0",
+   "source_provider": "filesystem",
+   "validation": {
+     "errors": [],
+diff --git a/tests/project_conductor_tests/test_cli.py b/tests/project_conductor_tests/test_cli.py
+index e28842c..9fe24dc 100644
+--- a/tests/project_conductor_tests/test_cli.py
++++ b/tests/project_conductor_tests/test_cli.py
+@@ -54,7 +54,8 @@ class RepositoryScannerCliTests(unittest.TestCase):
+             )
+ 
+             payload = json.loads(result.stdout)
+-            self.assertEqual(payload["registry_version"], "0.1.0")
++            self.assertEqual(payload["registry_version"], "0.2.0")
++            self.assertEqual(payload["registry_schema_version"], "1.0.0")
+             self.assertEqual(payload["source_provider"], "filesystem")
+ 
+ 
+diff --git a/tests/project_conductor_tests/test_registry.py b/tests/project_conductor_tests/test_registry.py
+index 9933d8b..3a3d424 100644
+--- a/tests/project_conductor_tests/test_registry.py
++++ b/tests/project_conductor_tests/test_registry.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ import unittest
+ from pathlib import Path
+ 
++from project_conductor.metadata_contract import default_metadata_contract
+ from project_conductor.registry import RegistryArtifact, build_artifact_registry, validate_registry_artifacts
+ from project_conductor.scanner import scan_repository
+ 
+@@ -16,12 +17,18 @@ class ArtifactRegistryTests(unittest.TestCase):
+         registry = build_artifact_registry(scan_repository(FIXTURE_ROOT))
+ 
+         self.assertEqual(registry.artifact_count, 2)
++        self.assertEqual(registry.registry_version, "0.2.0")
++        self.assertEqual(registry.registry_schema_version, "1.0.0")
++        self.assertEqual(registry.metadata_contract_version, "1.0.0")
+         self.assertTrue(registry.validation.valid)
+         self.assertEqual([artifact.path for artifact in registry.artifacts], ["README.md", "docs/no-metadata.md"])
+-        self.assertEqual(registry.artifacts[0].artifact_id, "FIXTURE-001")
++        self.assertEqual(registry.artifacts[0].artifact_id, "metadata:FIXTURE-001")
++        self.assertEqual(registry.artifacts[0].metadata_id, "FIXTURE-001")
+         self.assertEqual(registry.artifacts[0].metadata_status, "complete")
+-        self.assertEqual(registry.artifacts[1].artifact_id, "PATH-ce3a89079780")
++        self.assertTrue(registry.artifacts[0].durable)
++        self.assertEqual(registry.artifacts[1].artifact_id, "path:ce3a89079780")
+         self.assertEqual(registry.artifacts[1].metadata_status, "missing")
++        self.assertFalse(registry.artifacts[1].durable)
+         self.assertEqual(registry.artifacts[1].source_provider, "filesystem")
+ 
+     def test_registry_json_matches_golden_output(self) -> None:
+@@ -31,24 +38,26 @@ class ArtifactRegistryTests(unittest.TestCase):
+ 
+     def test_validation_detects_duplicate_ids(self) -> None:
+         artifact = RegistryArtifact(
+-            artifact_id="DUPLICATE",
++            artifact_id="metadata:DUPLICATE",
+             path="a.md",
+             artifact_type="repository",
+             title="A",
+             hash="hash-a",
+             metadata_status="complete",
+             metadata_id="DUPLICATE",
++            durable=True,
+             problems=(),
+             source_provider="filesystem",
+         )
+         duplicate = RegistryArtifact(
+-            artifact_id="DUPLICATE",
++            artifact_id="metadata:DUPLICATE",
+             path="b.md",
+             artifact_type="repository",
+             title="B",
+             hash="hash-b",
+             metadata_status="complete",
+             metadata_id="DUPLICATE",
++            durable=True,
+             problems=(),
+             source_provider="filesystem",
+         )
+@@ -58,6 +67,71 @@ class ArtifactRegistryTests(unittest.TestCase):
+         self.assertFalse(report.valid)
+         self.assertIn("duplicate artifact_id", report.errors[0])
+ 
++    def test_validation_detects_invalid_metadata_status(self) -> None:
++        artifact = RegistryArtifact(
++            artifact_id="metadata:BAD-001",
++            path="bad.md",
++            artifact_type="documentation",
++            title="Bad",
++            hash="hash-bad",
++            metadata_status="invalid",
++            metadata_id="BAD-001",
++            durable=True,
++            problems=(),
++            source_provider="filesystem",
++        )
++
++        report = validate_registry_artifacts((artifact,))
++
++        self.assertFalse(report.valid)
++        self.assertIn("invalid metadata_status", report.errors[0])
++
++    def test_validation_detects_unprefixed_metadata_artifact_id(self) -> None:
++        artifact = RegistryArtifact(
++            artifact_id="BAD-001",
++            path="bad.md",
++            artifact_type="documentation",
++            title="Bad",
++            hash="hash-bad",
++            metadata_status="complete",
++            metadata_id="BAD-001",
++            durable=True,
++            problems=(),
++            source_provider="filesystem",
++        )
++
++        report = validate_registry_artifacts((artifact,))
++
++        self.assertFalse(report.valid)
++        self.assertIn("metadata-backed artifact_id must start with 'metadata:'", report.errors[0])
++
++    def test_validation_rejects_metadata_free_durable_artifact(self) -> None:
++        artifact = RegistryArtifact(
++            artifact_id="path:abc123",
++            path="readme.md",
++            artifact_type="documentation",
++            title="Readme",
++            hash="hash-readme",
++            metadata_status="missing",
++            metadata_id=None,
++            durable=True,
++            problems=("metadata section not found",),
++            source_provider="filesystem",
++        )
++
++        report = validate_registry_artifacts((artifact,))
++
++        self.assertFalse(report.valid)
++        self.assertIn("cannot be durable without metadata", report.errors[0])
++
++    def test_metadata_contract_exposes_required_and_optional_fields(self) -> None:
++        contract = default_metadata_contract()
++
++        self.assertEqual(contract.version, "1.0.0")
++        self.assertIn("ID", contract.required_fields)
++        self.assertIn("Schema Version", contract.optional_fields)
++        self.assertIn("complete", contract.allowed_metadata_statuses)
++        self.assertIn("work-package", contract.durable_registry_authority_types)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
